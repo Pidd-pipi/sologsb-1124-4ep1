@@ -8,10 +8,19 @@ import type { Cover } from '@/types/cover'
 import type { PostalRoute } from '@/types/route'
 import type { StamplessEntry } from '@/types/stampentry'
 import type { AssetOwnerType, AssetSide, CatalogAsset } from '@/types/asset'
+import type {
+  AuctionArrival,
+  AuctionBid,
+  AuctionJournal,
+  AuctionLot,
+  AuctionOp,
+  AuctionResult,
+  AuctionVenue
+} from '@/types/auction'
 
 export const DB_NAME = 'gbpostmark'
 /** 当前数据结构版本号，升级迁移写在下面对应的 version() 中 */
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export class GbPostmarkDatabase extends Dexie {
   postmarks!: Table<Postmark, number>
@@ -20,6 +29,14 @@ export class GbPostmarkDatabase extends Dexie {
   stampEntries!: Table<StamplessEntry, number>
   /** 戳样 / 封图原图，单独建表 */
   assets!: Table<CatalogAsset, number>
+  /* 拍卖台账 */
+  auctionLots!: Table<AuctionLot, number>
+  auctionVenues!: Table<AuctionVenue, number>
+  auctionBids!: Table<AuctionBid, number>
+  auctionResults!: Table<AuctionResult, number>
+  auctionArrivals!: Table<AuctionArrival, number>
+  auctionOps!: Table<AuctionOp, number>
+  auctionJournal!: Table<AuctionJournal, number>
 
   constructor() {
     super(DB_NAME)
@@ -73,6 +90,25 @@ export class GbPostmarkDatabase extends Dexie {
             if (typeof rt.totalDays !== 'number') rt.totalDays = 0
           })
       })
+
+    // v3：拍卖台账——征集清单 / 会场预算 / 报价占用 / 落槌结果 / 到货登记 / 断网 outbox
+    // 占用、应付、最高报价均不做冗余字段，由 bids/results/arrivals 实时汇总，避免合并后脏写。
+    this.version(DB_VERSION).stores({
+      postmarks:
+        '++id, pmNo, type, office, province, yearFrom, yearTo, scarceLevel, inkColor, bilingual',
+      covers:
+        '++id, coverNo, sentFrom, sentTo, postDate, conditionGrade, registered, routeId, acquireFrom',
+      routes: '++id, routeNo, name, era, transport, totalDays',
+      stampEntries: '++id, coverId, stampName, variety, issueYear',
+      assets: '++id, ownerType, ownerId, side, [ownerType+ownerId]',
+      auctionLots: '++id, uid, lotNo, category, createdAt',
+      auctionVenues: '++id, uid, name, sessionDate',
+      auctionBids: '++id, uid, venueId, lotId, bidder, status, [venueId+lotId], [venueId+status]',
+      auctionResults: '++id, uid, venueId, lotId, bidId, [venueId+lotId], winner',
+      auctionArrivals: '++id, uid, venueId, lotId, resultId, status, [venueId+lotId]',
+      auctionOps: '++id, opId, type, opStatus, venueId, lotId, occurredAt',
+      auctionJournal: '++id, opId, type, venueId, lotId, createdAt'
+    })
   }
 }
 
@@ -82,6 +118,9 @@ export const db = new GbPostmarkDatabase()
 export async function initDatabase(): Promise<void> {
   await db.open()
   await seedIfEmpty()
+  // 动态引入避免与 auctionSeed 形成静态循环依赖
+  const { seedAuctionIfEmpty } = await import('./auctionSeed')
+  await seedAuctionIfEmpty()
 }
 
 /** 写入或覆盖一张原图（同 owner + side 视为同一张）。 */

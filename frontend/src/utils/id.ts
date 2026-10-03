@@ -1,8 +1,15 @@
 /** 编目号 / 唯一键 / 时间戳等通用工具。 */
 
-/** 生成跨表使用的本地唯一键（邮路节点拖拽排序等场景）。 */
+/**
+ * 生成跨表使用的本地唯一键（邮路节点拖拽排序等场景）。
+ * 优先使用 crypto.randomUUID，避免紧凑操作下基于时间戳的随机后缀碰撞。
+ */
 export function uid(prefix = 'k'): string {
-  const rnd = Math.random().toString(36).slice(2, 8)
+  const c = globalThis.crypto as Crypto | undefined
+  if (c && typeof c.randomUUID === 'function') {
+    return `${prefix}-${c.randomUUID()}`
+  }
+  const rnd = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 8)
   return `${prefix}-${Date.now().toString(36)}-${rnd}`
 }
 
