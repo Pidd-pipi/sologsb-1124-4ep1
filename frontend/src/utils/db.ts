@@ -8,10 +8,16 @@ import type { Cover } from '@/types/cover'
 import type { PostalRoute } from '@/types/route'
 import type { StamplessEntry } from '@/types/stampentry'
 import type { AssetOwnerType, AssetSide, CatalogAsset } from '@/types/asset'
+import type {
+  AuctionArrival,
+  AuctionBid,
+  AuctionJournal,
+  AuctionLot
+} from '@/types/auction'
 
 export const DB_NAME = 'gbpostmark'
 /** 当前数据结构版本号，升级迁移写在下面对应的 version() 中 */
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export class GbPostmarkDatabase extends Dexie {
   postmarks!: Table<Postmark, number>
@@ -20,6 +26,13 @@ export class GbPostmarkDatabase extends Dexie {
   stampEntries!: Table<StamplessEntry, number>
   /** 戳样 / 封图原图，单独建表 */
   assets!: Table<CatalogAsset, number>
+  /** 拍卖征集账：征集清单 / 报价 / 到货 / 操作账 */
+  auctionLots!: Table<AuctionLot, number>
+  auctionBids!: Table<AuctionBid, number>
+  auctionArrivals!: Table<AuctionArrival, number>
+  auctionJournal!: Table<AuctionJournal, number>
+  /** 单行键值表（总预算等） */
+  auctionMeta!: Table<{ key: string; value: number }, string>
 
   constructor() {
     super(DB_NAME)
@@ -73,6 +86,22 @@ export class GbPostmarkDatabase extends Dexie {
             if (typeof rt.totalDays !== 'number') rt.totalDays = 0
           })
       })
+
+    // v3：拍卖征集账（征集清单 / 报价 / 到货 / 断网操作账），纯新增表，无需迁移旧数据
+    this.version(DB_VERSION).stores({
+      postmarks:
+        '++id, pmNo, type, office, province, yearFrom, yearTo, scarceLevel, inkColor, bilingual',
+      covers:
+        '++id, coverNo, sentFrom, sentTo, postDate, conditionGrade, registered, routeId, acquireFrom',
+      routes: '++id, routeNo, name, era, transport, totalDays',
+      stampEntries: '++id, coverId, stampName, variety, issueYear',
+      assets: '++id, ownerType, ownerId, side, [ownerType+ownerId]',
+      auctionLots: '++id, lotNo, status, category, source',
+      auctionBids: '++id, lotNo, venue, isOwn, state',
+      auctionArrivals: '++id, lotNo, normal, arrivedAt',
+      auctionJournal: '++id, idempotencyKey, venue, status, occurredAt',
+      auctionMeta: '&key'
+    })
   }
 }
 
@@ -526,6 +555,126 @@ function seedStampEntries(): StamplessEntry[] {
   ]
 }
 
+/* ---------------------------- 拍卖账样例数据 ---------------------------- */
+
+function seedAuction(): {
+  budget: number
+  lots: AuctionLot[]
+  bids: AuctionBid[]
+} {
+  const lots: AuctionLot[] = [
+    {
+      id: 1,
+      lotNo: 'AL-0001',
+      title: '1910 年上海圆形日戳挂号实寄封（沪宁铁路邮路）',
+      category: 'cover',
+      refId: 1,
+      source: '上海诚轩 2026 春拍',
+      ceiling: 6000,
+      competitorHigh: 4200,
+      ownHigh: 4500,
+      status: 'watching',
+      hammerPrice: 0,
+      winner: '',
+      hammerAt: '',
+      note: '与编目 CV-0001 同类封，封背三中转戳齐全可补邮路实证。',
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    },
+    {
+      id: 2,
+      lotNo: 'AL-0002',
+      title: '1921 年天津滚筒戳实寄封（津浦—沪宁联运）',
+      category: 'cover',
+      refId: 2,
+      source: '北京嘉德 2026 春拍',
+      ceiling: 3000,
+      competitorHigh: 0,
+      ownHigh: 0,
+      status: 'watching',
+      hammerPrice: 0,
+      winner: '',
+      hammerAt: '',
+      note: '墨色饱满者加价，封舌裂口为通病，需现场验货。',
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    },
+    {
+      id: 3,
+      lotNo: 'AL-0003',
+      title: '抗战时期军邮 231 局日戳封（孤品级）',
+      category: 'postmark',
+      refId: 6,
+      source: '香港布约翰 2026 夏拍',
+      ceiling: 20000,
+      competitorHigh: 16000,
+      ownHigh: 15000,
+      status: 'outbid',
+      hammerPrice: 0,
+      winner: '',
+      hammerAt: '',
+      note: '军邮编号戳存世极少，意向价可上浮但须留足尾款与佣金。',
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    }
+  ]
+  const bids: AuctionBid[] = [
+    {
+      id: 1,
+      lotNo: 'AL-0001',
+      amount: 4500,
+      isOwn: true,
+      venue: '上海诚轩',
+      bidAt: '2026-04-12 10:20',
+      state: 'active',
+      reason: '',
+      winning: false,
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    },
+    {
+      id: 2,
+      lotNo: 'AL-0001',
+      amount: 4200,
+      isOwn: false,
+      venue: '上海诚轩',
+      bidAt: '2026-04-12 10:05',
+      state: 'active',
+      reason: '',
+      winning: false,
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    },
+    {
+      id: 3,
+      lotNo: 'AL-0003',
+      amount: 16000,
+      isOwn: false,
+      venue: '香港布约翰',
+      bidAt: '2026-04-10 14:30',
+      state: 'active',
+      reason: '',
+      winning: false,
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    },
+    {
+      id: 4,
+      lotNo: 'AL-0003',
+      amount: 15000,
+      isOwn: true,
+      venue: '香港布约翰',
+      bidAt: '2026-04-10 11:00',
+      state: 'active',
+      reason: '',
+      winning: false,
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    }
+  ]
+  return { budget: 30000, lots, bids }
+}
+
 /** 首次运行写入样例数据，保证每个页面都有可编目的内容。 */
 export async function seedIfEmpty(): Promise<void> {
   const count = await db.postmarks.count()
@@ -534,10 +683,29 @@ export async function seedIfEmpty(): Promise<void> {
   const routes = seedRoutes()
   const covers = seedCovers()
   const entries = seedStampEntries()
-  await db.transaction('rw', db.postmarks, db.covers, db.routes, db.stampEntries, async () => {
-    await db.postmarks.bulkPut(postmarks)
-    await db.routes.bulkPut(routes)
-    await db.covers.bulkPut(covers)
-    await db.stampEntries.bulkPut(entries)
-  })
+  const auction = seedAuction()
+  await db.transaction(
+    'rw',
+    [
+      db.postmarks,
+      db.covers,
+      db.routes,
+      db.stampEntries,
+      db.assets,
+      db.auctionLots,
+      db.auctionBids,
+      db.auctionArrivals,
+      db.auctionJournal,
+      db.auctionMeta
+    ],
+    async () => {
+      await db.postmarks.bulkPut(postmarks)
+      await db.routes.bulkPut(routes)
+      await db.covers.bulkPut(covers)
+      await db.stampEntries.bulkPut(entries)
+      await db.auctionLots.bulkPut(auction.lots)
+      await db.auctionBids.bulkPut(auction.bids)
+      await db.auctionMeta.put({ key: 'budget', value: auction.budget })
+    }
+  )
 }

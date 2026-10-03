@@ -34,6 +34,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/SearchView.vue'),
     meta: { title: '综合检索' }
   },
+  {
+    path: '/auction',
+    name: 'auction',
+    component: () => import('@/pages/AuctionDesk.vue'),
+    meta: { title: '拍卖征集账' }
+  },
+  {
+    path: '/auction/offline',
+    name: 'auction-offline',
+    component: () => import('@/pages/AuctionOffline.vue'),
+    meta: { title: '断网会场登记' }
+  },
   { path: '/:pathMatch(.*)*', redirect: '/postmarks' }
 ]
 

@@ -4,18 +4,21 @@ import { useRoute, useRouter } from 'vue-router'
 import { useCoverStore } from '@/stores/coverStore'
 import { usePostmarkStore } from '@/stores/postmarkStore'
 import { useRouteStore } from '@/stores/routeStore'
+import { useAuctionStore } from '@/stores/auctionStore'
 
 const current = useRoute()
 const router = useRouter()
 const postmarkStore = usePostmarkStore()
 const coverStore = useCoverStore()
 const routeStore = useRouteStore()
+const auctionStore = useAuctionStore()
 
 const activeMenu = computed(() => {
   const path = current.path
   if (path.startsWith('/covers')) return '/covers'
   if (path.startsWith('/postmarks')) return '/postmarks'
   if (path.startsWith('/search')) return '/search'
+  if (path.startsWith('/auction')) return '/auction'
   return ''
 })
 
@@ -35,7 +38,12 @@ const routeOptions = computed(() =>
 )
 
 onMounted(async () => {
-  await Promise.all([postmarkStore.load(), coverStore.load(), routeStore.load()])
+  await Promise.all([
+    postmarkStore.load(),
+    coverStore.load(),
+    routeStore.load(),
+    auctionStore.load()
+  ])
 })
 </script>
 
@@ -52,6 +60,16 @@ onMounted(async () => {
       <el-menu :default-active="activeMenu" mode="horizontal" router :ellipsis="false" class="app-nav">
         <el-menu-item index="/postmarks">邮戳目录</el-menu-item>
         <el-menu-item index="/covers">实寄封目录</el-menu-item>
+        <el-menu-item index="/auction">
+          拍卖征集账
+          <el-badge
+            v-if="auctionStore.pendingCount"
+            :value="auctionStore.pendingCount"
+            type="warning"
+            class="app-nav__badge"
+            :offset="[8, 6]"
+          />
+        </el-menu-item>
         <el-menu-item index="/search">综合检索</el-menu-item>
       </el-menu>
       <div class="app-aside">
@@ -123,6 +141,14 @@ onMounted(async () => {
   border-bottom: none !important;
   flex: 1;
   min-width: 280px;
+}
+.app-nav__badge {
+  position: absolute;
+  top: 10px;
+  right: 2px;
+}
+.app-nav__badge :deep(.el-badge__content) {
+  font-size: 10px;
 }
 .app-aside {
   display: flex;
